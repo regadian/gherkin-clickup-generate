@@ -21,10 +21,13 @@ function doPost(e) {
       throw new Error("Missing token, listId, or testCase data in the request.");
     }
     
-    // Build the payload for the ClickUp API - custom_fields are removed.
+    // CRITICAL FIX: Replace literal "\\n" with actual newline characters for ClickUp
+    const formattedDescription = testCase.description.replace(/\\n/g, '\n');
+
+    // Build the payload for the ClickUp API
     const payload = {
       name: testCase.name,
-      description: testCase.description,
+      description: formattedDescription,
       priority: testCase.priority,
     };
 

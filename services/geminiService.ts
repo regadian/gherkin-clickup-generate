@@ -31,10 +31,7 @@ const testCaseSchema = {
 };
 
 export async function generateTestCases(featureDescription: string): Promise<TestCase[]> {
-  if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set.");
-  }
-  
+  // Fix: Use process.env.API_KEY as per the coding guidelines to resolve the TypeScript error.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const response = await ai.models.generateContent({

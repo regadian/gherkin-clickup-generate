@@ -30,11 +30,9 @@ const testCaseSchema = {
   required: ['test_cases'],
 };
 
-export async function generateTestCases(featureDescription: string): Promise<TestCase[]> {
-  // FIX: Per coding guidelines, the API key must be retrieved from process.env.API_KEY.
-  const apiKey = process.env.API_KEY;
+export async function generateTestCases(featureDescription: string, apiKey: string): Promise<TestCase[]> {
   if (!apiKey) {
-    throw new Error("API_KEY environment variable not set. Please ensure it is configured.");
+    throw new Error("Google Gemini API Key was not provided. Please enter it in the input field.");
   }
   
   const ai = new GoogleGenAI({ apiKey: apiKey });

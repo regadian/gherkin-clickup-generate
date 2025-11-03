@@ -10,6 +10,7 @@ import TestCaseCard from './components/TestCaseCard';
 
 const App: React.FC = () => {
   const [prompt, setPrompt] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -28,8 +29,8 @@ const App: React.FC = () => {
 
   const handleGenerate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt) {
-      setError('Please fill in the feature description.');
+    if (!prompt || !geminiApiKey) {
+      setError('Please fill in the feature description and your Gemini API Key.');
       return;
     }
 
@@ -39,7 +40,7 @@ const App: React.FC = () => {
     setClickUpResults([]);
 
     try {
-      const generatedTestCases = await generateTestCases(prompt);
+      const generatedTestCases = await generateTestCases(prompt, geminiApiKey);
       setTestCases(generatedTestCases);
     } catch (err) {
       if (err instanceof Error) {
@@ -50,7 +51,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt]);
+  }, [prompt, geminiApiKey]);
 
   const handleCreateInClickUp = async () => {
     if (!clickUpToken || !clickUpListId || !appsScriptUrl) {
@@ -95,6 +96,22 @@ const App: React.FC = () => {
             <form onSubmit={handleGenerate}>
               <div className="space-y-6">
                 <div>
+                  <label htmlFor="gemini-key" className="block text-sm font-medium text-slate-300 mb-2">
+                    Google Gemini API Key
+                  </label>
+                  <Input
+                    id="gemini-key"
+                    type="password"
+                    placeholder="Enter your Gemini API Key here"
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    disabled={isLoading}
+                  />
+                   <p className="mt-2 text-xs text-slate-500">
+                    Get your key from Google AI Studio. It will not be stored.
+                  </p>
+                </div>
+                 <div>
                   <label htmlFor="prompt" className="block text-sm font-medium text-slate-300 mb-2">
                     Feature Description
                   </label>
@@ -109,7 +126,7 @@ const App: React.FC = () => {
                 </div>
               </div>
               <div className="mt-8">
-                <Button type="submit" disabled={isLoading || !prompt} className="w-full">
+                <Button type="submit" disabled={isLoading || !prompt || !geminiApiKey} className="w-full">
                   {isLoading ? 'Generating...' : 'Generate Test Cases'}
                 </Button>
               </div>

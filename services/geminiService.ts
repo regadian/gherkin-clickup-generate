@@ -31,7 +31,7 @@ const testCaseSchema = {
 };
 
 export async function generateTestCases(featureDescription: string): Promise<TestCase[]> {
-  // Fix: Use process.env.API_KEY as per the coding guidelines to resolve the TypeScript error.
+  // FIX: Corrected API key access to use process.env.API_KEY as per guidelines, resolving the TypeScript error.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   const response = await ai.models.generateContent({

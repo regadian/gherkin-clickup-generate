@@ -1,0 +1,74 @@
+// 1. Go to script.google.com and create a new project.
+// 2. Name your project (e.g., "ClickUp Proxy").
+// 3. Delete any placeholder code and paste this entire script.
+// 4. Click "Deploy" > "New deployment".
+// 5. Click the gear icon next to "Select type" and choose "Web app".
+// 6. Configure the deployment:
+//    - Description: ClickUp API Proxy
+//    - Execute as: Me (your@email.com)
+//    - Who has access: Anyone  <-- IMPORTANT
+// 7. Click "Deploy".
+// 8. Authorize the script when prompted.
+// 9. Copy the "Web app URL". You will paste this URL into the main application.
+
+function doPost(e) {
+  try {
+    // Parse the incoming request body from the React app
+    const requestData = JSON.parse(e.postData.contents);
+    const { token, listId, testCase } = requestData;
+
+    if (!token || !listId || !testCase) {
+      throw new Error("Missing token, listId, or testCase data in the request.");
+    }
+    
+    // Build the payload for the ClickUp API - custom_fields are removed.
+    const payload = {
+      name: testCase.name,
+      description: testCase.description,
+      priority: testCase.priority,
+    };
+
+    const clickUpApiUrl = `https://api.clickup.com/api/v2/list/${listId}/task`;
+
+    const options = {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'Authorization': token
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true // Important to catch errors manually
+    };
+
+    // Make the server-side call to ClickUp
+    const response = UrlFetchApp.fetch(clickUpApiUrl, options);
+    const responseCode = response.getResponseCode();
+    const responseBody = response.getContentText();
+
+    if (responseCode >= 200 && responseCode < 300) {
+      const data = JSON.parse(responseBody);
+      return createJsonResponse({
+        success: true,
+        message: 'Task created successfully.',
+        clickUpId: data.id
+      });
+    } else {
+      const errorData = JSON.parse(responseBody);
+      throw new Error(`ClickUp API Error: ${errorData.err} (Status: ${responseCode})`);
+    }
+
+  } catch (error) {
+    // Return a structured error message to the client
+    return createJsonResponse({
+      success: false,
+      message: error.message
+    });
+  }
+}
+
+// Helper function to create a proper JSON response for Apps Script
+function createJsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}

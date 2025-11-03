@@ -1,0 +1,5 @@
+{
+  "name": "AI Test Case Generator for ClickUp",
+  "description": "An intelligent test case generator that automatically creates tasks in ClickUp. Provide a feature description, and the AI will generate detailed test cases in Gherkin format and populate them directly into your ClickUp list.",
+  "requestFramePermissions": []
+}

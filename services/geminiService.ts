@@ -31,8 +31,13 @@ const testCaseSchema = {
 };
 
 export async function generateTestCases(featureDescription: string): Promise<TestCase[]> {
-  // FIX: Corrected API key access to use process.env.API_KEY as per guidelines, resolving the TypeScript error.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // FIX: Per coding guidelines, the API key must be retrieved from process.env.API_KEY.
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY environment variable not set. Please ensure it is configured.");
+  }
+  
+  const ai = new GoogleGenAI({ apiKey: apiKey });
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',

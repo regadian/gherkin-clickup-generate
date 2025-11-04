@@ -7,6 +7,7 @@ import Input from './components/Input';
 import Button from './components/Button';
 import Loader from './components/Loader';
 import TestCaseCard from './components/TestCaseCard';
+import Select from './components/Select';
 
 const App: React.FC = () => {
   const [prompt, setPrompt] = useState('');
@@ -26,6 +27,10 @@ const App: React.FC = () => {
   const [platform, setPlatform] = useState('');
   const [packageName, setPackageName] = useState('');
   const [featureMenu, setFeatureMenu] = useState('');
+  
+  // State for ClickUp Fields
+  const [clickUpTag, setClickUpTag] = useState('');
+  const [clickUpType, setClickUpType] = useState('Test Case'); // Default to 'Test Case'
 
   const handleGenerate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +71,18 @@ const App: React.FC = () => {
       testCases.map(tc => {
         const dynamicTitle = `[${platform || 'N/A'}][${packageName || 'N/A'}][${featureMenu || 'N/A'}] ${tc.title}`;
         const taskData = { ...tc, title: dynamicTitle };
-        return createClickUpTask(taskData, clickUpToken, clickUpListId, appsScriptUrl);
+        
+        const tags = [];
+        if (clickUpTag) tags.push(clickUpTag);
+
+        return createClickUpTask(
+          taskData, 
+          clickUpToken, 
+          clickUpListId, 
+          appsScriptUrl, 
+          tags, 
+          clickUpType
+        );
       })
     );
     
@@ -142,18 +158,33 @@ const App: React.FC = () => {
             {testCases.length > 0 && (
                 <div className="space-y-4 bg-slate-900/50 p-4 rounded-md border border-slate-700 mb-6">
                   <h3 className="font-bold text-lg text-slate-200">ClickUp Task Details</h3>
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
                            <label htmlFor="platform" className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
                            <Input id="platform" type="text" placeholder="e.g., Web" value={platform} onChange={e => setPlatform(e.target.value)} disabled={isCreatingInClickUp}/>
                         </div>
                         <div>
-                           <label htmlFor="package" className="block text-xs font-medium text-slate-400 mb-1">Package</label>
+                           <label htmlFor="package" className="block text-xs font-medium text-slate-400 mb-1">Package (for Title)</label>
                            <Input id="package" type="text" placeholder="e.g., Authentication" value={packageName} onChange={e => setPackageName(e.target.value)} disabled={isCreatingInClickUp}/>
                         </div>
                         <div>
                            <label htmlFor="feature-menu" className="block text-xs font-medium text-slate-400 mb-1">Feature/Menu</label>
                            <Input id="feature-menu" type="text" placeholder="e.g., Login" value={featureMenu} onChange={e => setFeatureMenu(e.target.value)} disabled={isCreatingInClickUp}/>
+                        </div>
+                        <div>
+                           <label htmlFor="clickup-tag" className="block text-xs font-medium text-slate-400 mb-1">Tag</label>
+                            <Select id="clickup-tag" value={clickUpTag} onChange={e => setClickUpTag(e.target.value)} disabled={isCreatingInClickUp}>
+                                <option value="">None</option>
+                                <option value="To Automate">To Automate</option>
+                                <option value="Manual">Manual</option>
+                            </Select>
+                        </div>
+                        <div>
+                            <label htmlFor="clickup-type" className="block text-xs font-medium text-slate-400 mb-1">Type (Custom Field)</label>
+                            <Select id="clickup-type" value={clickUpType} onChange={e => setClickUpType(e.target.value)} disabled={isCreatingInClickUp}>
+                                <option value="Test Case">Test Case</option>
+                                <option value="Deprecated">Deprecated</option>
+                            </Select>
                         </div>
                    </div>
                   <hr className="border-slate-700 my-4" />

@@ -19,16 +19,25 @@ export async function createClickUpTask(
   testCase: TestCase, 
   token: string, 
   listId: string, 
-  appsScriptUrl: string
+  appsScriptUrl: string,
+  tags?: string[],
+  type?: string
 ): Promise<ClickUpResult> {
+
+  const customFields: { name: string; value: string }[] = [];
+  if (type) {
+    customFields.push({ name: 'Type', value: type });
+  }
 
   const body = {
     token,
     listId,
     testCase: {
         name: testCase.title,
-        description: testCase.description, // Removed the ```gherkin``` wrapper
+        description: testCase.description,
         priority: mapPriorityToClickUp(testCase.priority),
+        tags: tags && tags.length > 0 ? tags : undefined,
+        custom_fields: customFields.length > 0 ? customFields : undefined,
     }
   };
 

@@ -21,8 +21,9 @@ function doPost(e) {
       throw new Error("Missing token, listId, or testCase data in the request.");
     }
     
-    // CRITICAL FIX: Replace literal "\\n" with actual newline characters for ClickUp
-    const formattedDescription = testCase.description.replace(/\\n/g, '\n');
+    // CRITICAL FIX: Replace literal "\\n" with actual newline characters for ClickUp's markdown rendering.
+    // Using a double newline ensures each Gherkin step is on its own line.
+    const formattedDescription = testCase.description.replace(/\\n/g, '\n\n');
 
     // Build the payload for the ClickUp API
     const payload = {
@@ -30,6 +31,66 @@ function doPost(e) {
       description: formattedDescription,
       priority: testCase.priority,
     };
+    
+    // Add tags to the payload if they exist in the request
+    if (testCase.tags && Array.isArray(testCase.tags) && testCase.tags.length > 0) {
+      payload.tags = testCase.tags;
+    }
+
+    // --- NEW: Handle Custom Fields ---
+    if (testCase.custom_fields && Array.isArray(testCase.custom_fields) && testCase.custom_fields.length > 0) {
+      const fieldsApiUrl = `https://api.clickup.com/api/v2/list/${listId}/field`;
+      const fieldsOptions = {
+        method: 'get',
+        contentType: 'application/json',
+        headers: { 'Authorization': token },
+        muteHttpExceptions: true
+      };
+      
+      const fieldsResponse = UrlFetchApp.fetch(fieldsApiUrl, fieldsOptions);
+      const fieldsResponseBody = fieldsResponse.getContentText();
+      const fieldsResponseCode = fieldsResponse.getResponseCode();
+
+      if (fieldsResponseCode !== 200) {
+        throw new Error(`Could not fetch custom fields for list ${listId}. Status: ${fieldsResponseCode}. Response: ${fieldsResponseBody}`);
+      }
+      
+      const availableFields = JSON.parse(fieldsResponseBody).fields;
+      const finalCustomFields = [];
+
+      for (const incomingField of testCase.custom_fields) {
+        // Guard against malformed incoming field data from client
+        if (!incomingField || !incomingField.name || !incomingField.value) continue;
+
+        // Find the definition for the custom field from the list's available fields (robustly)
+        const fieldDefinition = availableFields.find(
+          f => f && f.name && f.name.toLowerCase() === incomingField.name.toLowerCase()
+        );
+        
+        // If the field is found and is a dropdown or label type
+        if (fieldDefinition && (fieldDefinition.type === "drop_down" || fieldDefinition.type === "labels")) {
+          // Ensure there is a type_config and options array to search (robustly)
+          const options = (fieldDefinition.type_config && Array.isArray(fieldDefinition.type_config.options)) 
+            ? fieldDefinition.type_config.options 
+            : [];
+
+          // Find the specific option that matches the incoming value (robustly)
+          const option = options.find(
+            o => o && o.name && o.name.toLowerCase() === incomingField.value.toLowerCase()
+          );
+
+          if (option) {
+            finalCustomFields.push({ id: fieldDefinition.id, value: option.id });
+          }
+        }
+      }
+      
+      if (finalCustomFields.length > 0) {
+        payload.custom_fields = finalCustomFields;
+      }
+    }
+    // --- END: Handle Custom Fields ---
+
 
     const clickUpApiUrl = `https://api.clickup.com/api/v2/list/${listId}/task`;
 

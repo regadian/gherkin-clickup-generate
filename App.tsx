@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+
+import React, { useState, useCallback, useRef } from 'react';
 import { TestCase, ClickUpResult } from './types';
 import { generateTestCases } from './services/geminiService';
 import { createClickUpTask } from './services/clickupService';
@@ -15,6 +16,8 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [attachment, setAttachment] = useState<{ name: string; data: string; mimeType: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for ClickUp Integration
   const [clickUpToken, setClickUpToken] = useState('');
@@ -32,10 +35,70 @@ const App: React.FC = () => {
   const [clickUpTag, setClickUpTag] = useState('');
   const [clickUpType, setClickUpType] = useState('Test Case'); // Default to 'Test Case'
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setAttachment(null);
+      return;
+    }
+    processFile(file);
+  };
+  
+  const processFile = (file: File) => {
+    if (file.size > 4 * 1024 * 1024) { // ~4MB limit for Gemini Flash
+      setError('File size cannot exceed 4MB.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      // result is a data URL: "data:image/jpeg;base64,...."
+      const base64String = (reader.result as string).split(',')[1];
+      setAttachment({
+        name: file.name,
+        data: base64String,
+        mimeType: file.type,
+      });
+      setError(null); // Clear previous errors
+    };
+    reader.onerror = () => {
+      setError('Failed to read the file.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const removeAttachment = () => {
+    setAttachment(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData.items;
+    let imageFile: File | null = null;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        imageFile = items[i].getAsFile();
+        break;
+      }
+    }
+
+    if (imageFile) {
+      e.preventDefault(); // Prevent pasting file path or other text
+      processFile(imageFile);
+    }
+    // If no image is found, do nothing and let the default text paste happen.
+  };
+
   const handleGenerate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt || !geminiApiKey) {
-      setError('Please fill in the feature description and your Gemini API Key.');
+    if ((!prompt && !attachment) || !geminiApiKey) {
+      setError('Please provide a feature description (text or file) and your Gemini API Key.');
       return;
     }
 
@@ -45,7 +108,7 @@ const App: React.FC = () => {
     setClickUpResults([]);
 
     try {
-      const generatedTestCases = await generateTestCases(prompt, geminiApiKey);
+      const generatedTestCases = await generateTestCases(prompt, geminiApiKey, attachment);
       setTestCases(generatedTestCases);
     } catch (err) {
       if (err instanceof Error) {
@@ -56,7 +119,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, geminiApiKey]);
+  }, [prompt, geminiApiKey, attachment]);
 
   const handleCreateInClickUp = async () => {
     if (!clickUpToken || !clickUpListId || !appsScriptUrl) {
@@ -93,6 +156,12 @@ const App: React.FC = () => {
         const firstError = results.find(r => !r.success)?.message;
         setError(`Some tasks failed to create. Please check the details. First error: ${firstError}`);
     }
+  };
+
+  const handleTestCaseUpdate = (index: number, updatedTestCase: TestCase) => {
+    setTestCases(currentTestCases => 
+      currentTestCases.map((tc, i) => (i === index ? updatedTestCase : tc))
+    );
   };
 
   return (
@@ -133,16 +202,52 @@ const App: React.FC = () => {
                   </label>
                   <TextArea
                     id="prompt"
-                    placeholder='e.g., "Create test cases for a user login feature with Gherkin style"'
+                    placeholder='e.g., "Create test cases for a user login feature with Gherkin style". You can also attach a file or paste a screenshot directly into this area.'
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
+                    onPaste={handlePaste}
                     disabled={isLoading}
-                    rows={8}
+                    rows={6}
                   />
                 </div>
+                 <div>
+                    <label htmlFor="file-upload" className="block text-sm font-medium text-slate-300 mb-2">
+                      Attach File (Optional)
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <label htmlFor="file-upload" className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 px-4 rounded-md transition-colors duration-200 inline-block">
+                          Choose File
+                      </label>
+                      <input
+                          id="file-upload"
+                          type="file"
+                          ref={fileInputRef}
+                          className="hidden"
+                          onChange={handleFileChange}
+                          accept="image/*,text/plain,.md"
+                          disabled={isLoading}
+                      />
+                      {attachment && (
+                        <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-900/50 py-1 px-3 rounded-full">
+                            <span className="truncate max-w-xs">{attachment.name}</span>
+                            <button
+                                type="button"
+                                onClick={removeAttachment}
+                                className="text-red-500 hover:text-red-400 font-bold text-lg leading-none"
+                                aria-label="Remove attached file"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                        Attach an image (mockup, screenshot) or a text file. Max 4MB.
+                    </p>
+                  </div>
               </div>
               <div className="mt-8">
-                <Button type="submit" disabled={isLoading || !prompt || !geminiApiKey} className="w-full">
+                <Button type="submit" disabled={isLoading || (!prompt && !attachment) || !geminiApiKey} className="w-full">
                   {isLoading ? 'Generating...' : 'Generate Test Cases'}
                 </Button>
               </div>
@@ -214,7 +319,13 @@ const App: React.FC = () => {
                 {!isLoading && testCases.length > 0 && (
                 <div className="space-y-4 max-h-[45vh] overflow-y-auto pr-2">
                     {testCases.map((tc, index) => (
-                      <TestCaseCard key={index} testCase={tc} result={clickUpResults[index]} />
+                      <TestCaseCard
+                        key={index}
+                        testCase={tc}
+                        result={clickUpResults[index]}
+                        index={index}
+                        onUpdate={handleTestCaseUpdate}
+                      />
                     ))}
                 </div>
                 )}

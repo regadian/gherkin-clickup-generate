@@ -2,13 +2,18 @@ import React from 'react';
 import { TestCase, ClickUpResult } from '../types';
 import { CheckIcon } from './icons/CheckIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
+import Input from './Input';
+import TextArea from './TextArea';
+import Select from './Select';
 
 interface TestCaseCardProps {
   testCase: TestCase;
   result?: ClickUpResult;
+  index: number;
+  onUpdate: (index: number, updatedTestCase: TestCase) => void;
 }
 
-const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result }) => {
+const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result, index, onUpdate }) => {
   const getStatusIndicator = () => {
     if (!result) return null;
 
@@ -31,15 +36,32 @@ const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result }) => {
 
   return (
     <div className={`bg-slate-900/70 p-4 rounded-lg border ${result ? (result.success ? 'border-green-600/50' : 'border-red-600/50') : 'border-slate-700'} transition-all`}>
-      <div className="flex justify-between items-start">
-        <h3 className="font-bold text-lg text-slate-100 pr-4">{testCase.title}</h3>
-        <span className="flex-shrink-0 bg-slate-700 text-slate-300 text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize">
-          {testCase.priority.toLowerCase()}
-        </span>
+      <div className="flex justify-between items-start gap-4">
+        <Input
+            value={testCase.title}
+            onChange={(e) => onUpdate(index, { ...testCase, title: e.target.value })}
+            className="font-bold text-lg text-slate-100 !bg-transparent border-0 focus:!ring-0 p-0 flex-grow"
+            aria-label="Test Case Title"
+        />
+        <Select
+          className="flex-shrink-0 bg-slate-700 text-slate-300 text-xs font-semibold px-2.5 py-1 rounded-full capitalize border-slate-600 w-auto"
+          value={testCase.priority}
+          onChange={(e) => onUpdate(index, { ...testCase, priority: e.target.value as TestCase['priority'] })}
+          aria-label="Test Case Priority"
+        >
+          <option value="Urgent">Urgent</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </Select>
       </div>
-      <pre className="mt-3 bg-slate-950 p-3 rounded-md text-slate-300 text-sm whitespace-pre-wrap font-mono overflow-x-auto">
-        <code>{testCase.description}</code>
-      </pre>
+      <TextArea
+        className="mt-3 bg-slate-950 p-3 rounded-md text-slate-300 text-sm whitespace-pre-wrap font-mono w-full"
+        value={testCase.description}
+        onChange={(e) => onUpdate(index, { ...testCase, description: e.target.value })}
+        rows={10}
+        aria-label="Test Case Description"
+      />
       {getStatusIndicator()}
     </div>
   );

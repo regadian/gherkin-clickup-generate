@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { TestCase } from "../types";
 
@@ -30,18 +31,41 @@ const testCaseSchema = {
   required: ['test_cases'],
 };
 
-export async function generateTestCases(featureDescription: string, apiKey: string): Promise<TestCase[]> {
+export async function generateTestCases(
+    featureDescription: string, 
+    apiKey: string,
+    attachment: { data: string; mimeType: string } | null
+): Promise<TestCase[]> {
   if (!apiKey) {
     throw new Error("Google Gemini API Key was not provided. Please enter it in the input field.");
   }
   
   const ai = new GoogleGenAI({ apiKey: apiKey });
 
+  const contentParts: any[] = [];
+
+  const instructions = "Generate a comprehensive set of test cases for the following feature, using Gherkin syntax. Analyze the provided text and/or attached file (e.g., a mockup image or requirements doc).";
+
+  if (featureDescription) {
+    contentParts.push({ text: `${instructions}\n\nFeature Description:\n${featureDescription}`});
+  } else {
+    contentParts.push({ text: instructions });
+  }
+
+  if (attachment) {
+      contentParts.push({
+          inlineData: {
+              mimeType: attachment.mimeType,
+              data: attachment.data,
+          }
+      });
+  }
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: `Generate a comprehensive set of test cases for the following feature, using Gherkin syntax. Ensure each test case has a title (without prefixes), a detailed Gherkin description with proper explicit newlines ('\\n') and NO colons after keywords, and a priority. Feature: ${featureDescription}`,
+    contents: { parts: contentParts },
     config: {
-      systemInstruction: "You are an expert QA engineer specializing in writing clear, concise, and comprehensive test cases in Gherkin format. Your goal is to generate a list of test cases based on a user's feature description. Respond ONLY with the JSON object defined in the schema, adhering strictly to the format and constraints.",
+      systemInstruction: "You are an expert QA engineer specializing in writing clear, concise, and comprehensive test cases in Gherkin format. Your goal is to generate a list of test cases based on a user's feature description and any attached files. Respond ONLY with the JSON object defined in the schema, adhering strictly to the format and constraints.",
       responseMimeType: 'application/json',
       responseSchema: testCaseSchema,
     },

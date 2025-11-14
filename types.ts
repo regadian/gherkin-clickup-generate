@@ -9,3 +9,8 @@ export interface ClickUpResult {
   message: string;
   clickUpId?: string;
 }
+
+export interface AutomationCode {
+  stepDefinition: string;
+  pageObject: string;
+}

@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TestCase, ClickUpResult } from '../types';
 import { CheckIcon } from './icons/CheckIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import Input from './Input';
 import TextArea from './TextArea';
 import Select from './Select';
+import { PencilIcon } from './icons/PencilIcon';
+import { CheckIconSmall } from './icons/CheckIconSmall';
+import GherkinViewer from './GherkinViewer';
 
 interface TestCaseCardProps {
   testCase: TestCase;
@@ -14,20 +17,22 @@ interface TestCaseCardProps {
 }
 
 const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result, index, onUpdate }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  
   const getStatusIndicator = () => {
     if (!result) return null;
 
     if (result.success) {
       return (
-        <div className="flex items-center gap-2 text-green-400 text-sm mt-2">
-          <CheckIcon className="w-5 h-5" />
+        <div className="flex items-center gap-2 text-green-400 text-sm">
+          <CheckIcon className="w-5 h-5 flex-shrink-0" />
           <span>Success: Task created (ID: {result.clickUpId})</span>
         </div>
       );
     } else {
       return (
-        <div className="flex items-center gap-2 text-red-400 text-sm mt-2">
-          <XCircleIcon className="w-5 h-5" />
+        <div className="flex items-center gap-2 text-red-400 text-sm">
+          <XCircleIcon className="w-5 h-5 flex-shrink-0" />
           <span className="truncate" title={result.message}>Error: {result.message}</span>
         </div>
       );
@@ -55,14 +60,42 @@ const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result, index, on
           <option value="Low">Low</option>
         </Select>
       </div>
-      <TextArea
-        className="mt-3 bg-slate-950 p-3 rounded-md text-slate-300 text-sm whitespace-pre-wrap font-mono w-full"
-        value={testCase.description}
-        onChange={(e) => onUpdate(index, { ...testCase, description: e.target.value })}
-        rows={10}
-        aria-label="Test Case Description"
-      />
-      {getStatusIndicator()}
+      
+      {isEditing ? (
+        <TextArea
+          className="mt-3 bg-slate-950 p-3 rounded-md text-slate-300 text-sm whitespace-pre-wrap font-mono w-full"
+          value={testCase.description}
+          onChange={(e) => onUpdate(index, { ...testCase, description: e.target.value })}
+          rows={10}
+          aria-label="Test Case Description"
+          autoFocus
+        />
+      ) : (
+        <GherkinViewer gherkinText={testCase.description} />
+      )}
+
+      <div className="mt-2 flex justify-between items-center min-h-[30px]">
+          <div className="flex-grow pr-4">
+              {getStatusIndicator()}
+          </div>
+          <button
+              onClick={() => setIsEditing(!isEditing)}
+              className="flex items-center gap-1.5 text-slate-400 hover:text-white px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 transition-colors text-sm"
+              aria-label={isEditing ? 'Save changes' : 'Edit test case'}
+          >
+              {isEditing ? (
+                  <>
+                      <CheckIconSmall className="w-4 h-4" />
+                      Save
+                  </>
+              ) : (
+                  <>
+                      <PencilIcon className="w-4 h-4" />
+                      Edit
+                  </>
+              )}
+          </button>
+      </div>
     </div>
   );
 };

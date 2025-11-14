@@ -55,14 +55,13 @@ const App: React.FC = () => {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      // result is a data URL: "data:image/jpeg;base64,...."
       const base64String = (reader.result as string).split(',')[1];
       setAttachment({
         name: file.name,
         data: base64String,
         mimeType: file.type,
       });
-      setError(null); // Clear previous errors
+      setError(null);
     };
     reader.onerror = () => {
       setError('Failed to read the file.');
@@ -89,10 +88,9 @@ const App: React.FC = () => {
     }
 
     if (imageFile) {
-      e.preventDefault(); // Prevent pasting file path or other text
+      e.preventDefault();
       processFile(imageFile);
     }
-    // If no image is found, do nothing and let the default text paste happen.
   };
 
   const handleGenerate = useCallback(async (e: React.FormEvent) => {
@@ -172,7 +170,7 @@ const App: React.FC = () => {
             AI Test Case Generator for ClickUp
           </h1>
           <p className="mt-4 text-lg text-slate-400">
-            Generate Gherkin-style test cases and create them directly in ClickUp.
+            Generate Gherkin-style test cases, then create tasks directly in ClickUp.
           </p>
         </header>
 
@@ -248,7 +246,7 @@ const App: React.FC = () => {
               </div>
               <div className="mt-8">
                 <Button type="submit" disabled={isLoading || (!prompt && !attachment) || !geminiApiKey} className="w-full">
-                  {isLoading ? 'Generating...' : 'Generate Test Cases'}
+                  {isLoading ? 'Generating Test Cases...' : 'Generate Test Cases'}
                 </Button>
               </div>
             </form>
@@ -261,23 +259,24 @@ const App: React.FC = () => {
             {error && <div className="mb-4 bg-red-900/50 text-red-300 p-4 rounded-md border border-red-700 text-sm">{error}</div>}
 
             {testCases.length > 0 && (
+              <>
                 <div className="space-y-4 bg-slate-900/50 p-4 rounded-md border border-slate-700 mb-6">
                   <h3 className="font-bold text-lg text-slate-200">ClickUp Task Details</h3>
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div>
-                           <label htmlFor="platform" className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
-                           <Input id="platform" type="text" placeholder="e.g., Web" value={platform} onChange={e => setPlatform(e.target.value)} disabled={isCreatingInClickUp}/>
+                          <label htmlFor="platform" className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
+                          <Input id="platform" type="text" placeholder="e.g., Web" value={platform} onChange={e => setPlatform(e.target.value)} disabled={isCreatingInClickUp}/>
                         </div>
                         <div>
-                           <label htmlFor="package" className="block text-xs font-medium text-slate-400 mb-1">Package (for Title)</label>
-                           <Input id="package" type="text" placeholder="e.g., Authentication" value={packageName} onChange={e => setPackageName(e.target.value)} disabled={isCreatingInClickUp}/>
+                          <label htmlFor="package" className="block text-xs font-medium text-slate-400 mb-1">Package (for Title)</label>
+                          <Input id="package" type="text" placeholder="e.g., Authentication" value={packageName} onChange={e => setPackageName(e.target.value)} disabled={isCreatingInClickUp}/>
                         </div>
                         <div>
-                           <label htmlFor="feature-menu" className="block text-xs font-medium text-slate-400 mb-1">Feature/Menu</label>
-                           <Input id="feature-menu" type="text" placeholder="e.g., Login" value={featureMenu} onChange={e => setFeatureMenu(e.target.value)} disabled={isCreatingInClickUp}/>
+                          <label htmlFor="feature-menu" className="block text-xs font-medium text-slate-400 mb-1">Feature/Menu</label>
+                          <Input id="feature-menu" type="text" placeholder="e.g., Login" value={featureMenu} onChange={e => setFeatureMenu(e.target.value)} disabled={isCreatingInClickUp}/>
                         </div>
                         <div>
-                           <label htmlFor="clickup-tag" className="block text-xs font-medium text-slate-400 mb-1">Tag</label>
+                          <label htmlFor="clickup-tag" className="block text-xs font-medium text-slate-400 mb-1">Tag</label>
                             <Select id="clickup-tag" value={clickUpTag} onChange={e => setClickUpTag(e.target.value)} disabled={isCreatingInClickUp}>
                                 <option value="">None</option>
                                 <option value="To Automate">To Automate</option>
@@ -291,28 +290,29 @@ const App: React.FC = () => {
                                 <option value="Deprecated">Deprecated</option>
                             </Select>
                         </div>
-                   </div>
+                  </div>
                   <hr className="border-slate-700 my-4" />
-                   <div>
+                  <div>
                         <label htmlFor="app-script-url" className="block text-xs font-medium text-slate-400 mb-1">Google Apps Script Web App URL</label>
                         <Input id="app-script-url" type="url" placeholder="https://script.google.com/macros/s/..." value={appsScriptUrl} onChange={e => setAppsScriptUrl(e.target.value)} disabled={isCreatingInClickUp}/>
-                   </div>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div>
+                    <div>
                         <label htmlFor="clickup-token" className="block text-xs font-medium text-slate-400 mb-1">ClickUp API Token</label>
                         <Input id="clickup-token" type="password" placeholder="Your Personal API Token" value={clickUpToken} onChange={e => setClickUpToken(e.target.value)} disabled={isCreatingInClickUp}/>
-                     </div>
-                     <div>
+                    </div>
+                    <div>
                         <label htmlFor="clickup-list" className="block text-xs font-medium text-slate-400 mb-1">ClickUp List ID</label>
                         <Input id="clickup-list" type="text" placeholder="e.g., 9012345678" value={clickUpListId} onChange={e => setClickUpListId(e.target.value)} disabled={isCreatingInClickUp}/>
-                     </div>
+                    </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-4 mt-4">
-                     <Button onClick={handleCreateInClickUp} disabled={isCreatingInClickUp || !clickUpToken || !clickUpListId || !appsScriptUrl} className="flex-1">
+                    <Button onClick={handleCreateInClickUp} disabled={isCreatingInClickUp || !clickUpToken || !clickUpListId || !appsScriptUrl} className="flex-1">
                         {isCreatingInClickUp ? 'Creating Tasks...' : 'Create Tasks in ClickUp'}
-                     </Button>
+                    </Button>
                   </div>
                 </div>
+              </>
             )}
             
             <div className="flex-grow">

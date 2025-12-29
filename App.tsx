@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useRef } from 'react';
-import { TestCase, ClickUpResult } from './types';
+import { TestCase, ClickUpResult, Attachment } from './types';
 import { generateTestCases } from './services/geminiService';
 import { createClickUpTask } from './services/clickupService';
 import TextArea from './components/TextArea';
@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
-  const [attachment, setAttachment] = useState<{ name: string; data: string; mimeType: string } | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for ClickUp Integration
@@ -33,70 +33,68 @@ const App: React.FC = () => {
   
   // State for ClickUp Fields
   const [clickUpTag, setClickUpTag] = useState('');
-  const [clickUpType, setClickUpType] = useState('Test Case'); // Default to 'Test Case'
+  const [clickUpType, setClickUpType] = useState('Test Case');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setAttachment(null);
-      return;
-    }
-    processFile(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    processFiles(Array.from(files));
   };
   
-  const processFile = (file: File) => {
-    if (file.size > 4 * 1024 * 1024) { // ~4MB limit for Gemini Flash
-      setError('File size cannot exceed 4MB.');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+  const processFiles = (files: File[]) => {
+    files.forEach(file => {
+      if (file.size > 10 * 1024 * 1024) { // Increased to 10MB per file
+        setError(`File ${file.name} is too large. Max 10MB.`);
+        return;
       }
-      return;
-    }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = (reader.result as string).split(',')[1];
-      setAttachment({
-        name: file.name,
-        data: base64String,
-        mimeType: file.type,
-      });
-      setError(null);
-    };
-    reader.onerror = () => {
-      setError('Failed to read the file.');
-    };
-    reader.readAsDataURL(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        setAttachments(prev => [...prev, {
+          name: file.name,
+          data: base64String,
+          mimeType: file.type,
+        }]);
+        setError(null);
+      };
+      reader.onerror = () => {
+        setError(`Failed to read file ${file.name}`);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input so the same file can be selected again if removed
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
   }
 
-  const removeAttachment = () => {
-    setAttachment(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items;
-    let imageFile: File | null = null;
+    const pastedFiles: File[] = [];
 
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
-        imageFile = items[i].getAsFile();
-        break;
+        const file = items[i].getAsFile();
+        if (file) pastedFiles.push(file);
       }
     }
 
-    if (imageFile) {
+    if (pastedFiles.length > 0) {
       e.preventDefault();
-      processFile(imageFile);
+      processFiles(pastedFiles);
     }
   };
 
   const handleGenerate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!prompt && !attachment) || !geminiApiKey) {
-      setError('Please provide a feature description (text or file) and your Gemini API Key.');
+    if ((!prompt && attachments.length === 0) || !geminiApiKey) {
+      setError('Please provide a feature description (text or images) and your Gemini API Key.');
       return;
     }
 
@@ -106,7 +104,7 @@ const App: React.FC = () => {
     setClickUpResults([]);
 
     try {
-      const generatedTestCases = await generateTestCases(prompt, geminiApiKey, attachment);
+      const generatedTestCases = await generateTestCases(prompt, geminiApiKey, attachments);
       setTestCases(generatedTestCases);
     } catch (err) {
       if (err instanceof Error) {
@@ -117,7 +115,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, geminiApiKey, attachment]);
+  }, [prompt, geminiApiKey, attachments]);
 
   const handleCreateInClickUp = async () => {
     if (!clickUpToken || !clickUpListId || !appsScriptUrl) {
@@ -152,7 +150,7 @@ const App: React.FC = () => {
 
     if (results.some(r => !r.success)) {
         const firstError = results.find(r => !r.success)?.message;
-        setError(`Some tasks failed to create. Please check the details. First error: ${firstError}`);
+        setError(`Some tasks failed to create. First error: ${firstError}`);
     }
   };
 
@@ -170,7 +168,7 @@ const App: React.FC = () => {
             AI Test Case Generator for ClickUp
           </h1>
           <p className="mt-4 text-lg text-slate-400">
-            Generate Gherkin-style test cases, then create tasks directly in ClickUp.
+            Generate Gherkin-style test cases from text and multiple images.
           </p>
         </header>
 
@@ -191,7 +189,7 @@ const App: React.FC = () => {
                     disabled={isLoading}
                   />
                    <p className="mt-2 text-xs text-slate-500">
-                    Get your key from Google AI Studio. It will not be stored.
+                    Get your key from Google AI Studio.
                   </p>
                 </div>
                  <div>
@@ -200,7 +198,7 @@ const App: React.FC = () => {
                   </label>
                   <TextArea
                     id="prompt"
-                    placeholder='e.g., "Create test cases for a user login feature with Gherkin style". You can also attach a file or paste a screenshot directly into this area.'
+                    placeholder='e.g., "Login flow with social media support". Paste screenshots directly here.'
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     onPaste={handlePaste}
@@ -210,42 +208,50 @@ const App: React.FC = () => {
                 </div>
                  <div>
                     <label htmlFor="file-upload" className="block text-sm font-medium text-slate-300 mb-2">
-                      Attach File (Optional)
+                      Attach Files (Multiple images allowed)
                     </label>
-                    <div className="flex items-center gap-4">
-                      <label htmlFor="file-upload" className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 px-4 rounded-md transition-colors duration-200 inline-block">
-                          Choose File
-                      </label>
-                      <input
-                          id="file-upload"
-                          type="file"
-                          ref={fileInputRef}
-                          className="hidden"
-                          onChange={handleFileChange}
-                          accept="image/*,text/plain,.md"
-                          disabled={isLoading}
-                      />
-                      {attachment && (
-                        <div className="flex items-center gap-2 text-sm text-slate-400 bg-slate-900/50 py-1 px-3 rounded-full">
-                            <span className="truncate max-w-xs">{attachment.name}</span>
-                            <button
-                                type="button"
-                                onClick={removeAttachment}
-                                className="text-red-500 hover:text-red-400 font-bold text-lg leading-none"
-                                aria-label="Remove attached file"
-                            >
-                                &times;
-                            </button>
+                    <div className="flex flex-col gap-4">
+                      <div className="flex items-center gap-4">
+                        <label htmlFor="file-upload" className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 px-4 rounded-md transition-colors duration-200 inline-block">
+                            Choose Files
+                        </label>
+                        <input
+                            id="file-upload"
+                            type="file"
+                            ref={fileInputRef}
+                            className="hidden"
+                            onChange={handleFileChange}
+                            accept="image/*,text/plain,.md"
+                            disabled={isLoading}
+                            multiple
+                        />
+                        <span className="text-sm text-slate-400">
+                          {attachments.length} file(s) selected
+                        </span>
+                      </div>
+                      
+                      {attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                          {attachments.map((att, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs text-slate-300 bg-slate-800 py-1 px-3 rounded-full border border-slate-600 group">
+                                <span className="truncate max-w-[150px]">{att.name}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => removeAttachment(idx)}
+                                    className="text-slate-500 hover:text-red-400 transition-colors font-bold"
+                                    aria-label="Remove file"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                        Attach an image (mockup, screenshot) or a text file. Max 4MB.
-                    </p>
                   </div>
               </div>
               <div className="mt-8">
-                <Button type="submit" disabled={isLoading || (!prompt && !attachment) || !geminiApiKey} className="w-full">
+                <Button type="submit" disabled={isLoading || (!prompt && attachments.length === 0) || !geminiApiKey} className="w-full">
                   {isLoading ? 'Generating Test Cases...' : 'Generate Test Cases'}
                 </Button>
               </div>
@@ -259,60 +265,28 @@ const App: React.FC = () => {
             {error && <div className="mb-4 bg-red-900/50 text-red-300 p-4 rounded-md border border-red-700 text-sm">{error}</div>}
 
             {testCases.length > 0 && (
-              <>
-                <div className="space-y-4 bg-slate-900/50 p-4 rounded-md border border-slate-700 mb-6">
-                  <h3 className="font-bold text-lg text-slate-200">ClickUp Task Details</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div>
-                          <label htmlFor="platform" className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
-                          <Input id="platform" type="text" placeholder="e.g., Web" value={platform} onChange={e => setPlatform(e.target.value)} disabled={isCreatingInClickUp}/>
-                        </div>
-                        <div>
-                          <label htmlFor="package" className="block text-xs font-medium text-slate-400 mb-1">Package (for Title)</label>
-                          <Input id="package" type="text" placeholder="e.g., Authentication" value={packageName} onChange={e => setPackageName(e.target.value)} disabled={isCreatingInClickUp}/>
-                        </div>
-                        <div>
-                          <label htmlFor="feature-menu" className="block text-xs font-medium text-slate-400 mb-1">Feature/Menu</label>
-                          <Input id="feature-menu" type="text" placeholder="e.g., Login" value={featureMenu} onChange={e => setFeatureMenu(e.target.value)} disabled={isCreatingInClickUp}/>
-                        </div>
-                        <div>
-                          <label htmlFor="clickup-tag" className="block text-xs font-medium text-slate-400 mb-1">Tag</label>
-                            <Select id="clickup-tag" value={clickUpTag} onChange={e => setClickUpTag(e.target.value)} disabled={isCreatingInClickUp}>
-                                <option value="">None</option>
-                                <option value="To Automate">To Automate</option>
-                                <option value="Manual">Manual</option>
-                            </Select>
-                        </div>
-                        <div>
-                            <label htmlFor="clickup-type" className="block text-xs font-medium text-slate-400 mb-1">Type (Custom Field)</label>
-                            <Select id="clickup-type" value={clickUpType} onChange={e => setClickUpType(e.target.value)} disabled={isCreatingInClickUp}>
-                                <option value="Test Case">Test Case</option>
-                                <option value="Deprecated">Deprecated</option>
-                            </Select>
-                        </div>
-                  </div>
-                  <hr className="border-slate-700 my-4" />
-                  <div>
-                        <label htmlFor="app-script-url" className="block text-xs font-medium text-slate-400 mb-1">Google Apps Script Web App URL</label>
-                        <Input id="app-script-url" type="url" placeholder="https://script.google.com/macros/s/..." value={appsScriptUrl} onChange={e => setAppsScriptUrl(e.target.value)} disabled={isCreatingInClickUp}/>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="clickup-token" className="block text-xs font-medium text-slate-400 mb-1">ClickUp API Token</label>
-                        <Input id="clickup-token" type="password" placeholder="Your Personal API Token" value={clickUpToken} onChange={e => setClickUpToken(e.target.value)} disabled={isCreatingInClickUp}/>
-                    </div>
-                    <div>
-                        <label htmlFor="clickup-list" className="block text-xs font-medium text-slate-400 mb-1">ClickUp List ID</label>
-                        <Input id="clickup-list" type="text" placeholder="e.g., 9012345678" value={clickUpListId} onChange={e => setClickUpListId(e.target.value)} disabled={isCreatingInClickUp}/>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 mt-4">
-                    <Button onClick={handleCreateInClickUp} disabled={isCreatingInClickUp || !clickUpToken || !clickUpListId || !appsScriptUrl} className="flex-1">
-                        {isCreatingInClickUp ? 'Creating Tasks...' : 'Create Tasks in ClickUp'}
-                    </Button>
-                  </div>
+              <div className="space-y-4 bg-slate-900/50 p-4 rounded-md border border-slate-700 mb-6">
+                <h3 className="font-bold text-lg text-slate-200">ClickUp Task Details</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Platform</label>
+                        <Input placeholder="e.g., Web" value={platform} onChange={e => setPlatform(e.target.value)} disabled={isCreatingInClickUp}/>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Package</label>
+                        <Input placeholder="e.g., Auth" value={packageName} onChange={e => setPackageName(e.target.value)} disabled={isCreatingInClickUp}/>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Feature</label>
+                        <Input placeholder="e.g., Login" value={featureMenu} onChange={e => setFeatureMenu(e.target.value)} disabled={isCreatingInClickUp}/>
+                      </div>
                 </div>
-              </>
+                <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                  <Button onClick={handleCreateInClickUp} disabled={isCreatingInClickUp || !clickUpToken || !clickUpListId || !appsScriptUrl} className="flex-1">
+                      {isCreatingInClickUp ? 'Creating Tasks...' : 'Create Tasks in ClickUp'}
+                  </Button>
+                </div>
+              </div>
             )}
             
             <div className="flex-grow">

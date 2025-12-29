@@ -1,3 +1,4 @@
+
 export interface TestCase {
   title: string;
   description: string;
@@ -13,4 +14,10 @@ export interface ClickUpResult {
 export interface AutomationCode {
   stepDefinition: string;
   pageObject: string;
+}
+
+export interface Attachment {
+  name: string;
+  data: string;
+  mimeType: string;
 }

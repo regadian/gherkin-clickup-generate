@@ -1,3 +1,4 @@
+
 import { TestCase, ClickUpResult } from '../types';
 
 function mapPriorityToClickUp(priority: string): number {
@@ -21,12 +22,16 @@ export async function createClickUpTask(
   listId: string, 
   appsScriptUrl: string,
   tags?: string[],
-  type?: string
+  type?: string,
+  executionType?: string
 ): Promise<ClickUpResult> {
 
   const customFields: { name: string; value: string }[] = [];
   if (type) {
     customFields.push({ name: 'Type', value: type });
+  }
+  if (executionType) {
+    customFields.push({ name: 'Execution Type', value: executionType });
   }
 
   const body = {
@@ -45,7 +50,7 @@ export async function createClickUpTask(
     const response = await fetch(appsScriptUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8', // Required by Apps Script for POST
+        'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify(body),
     });

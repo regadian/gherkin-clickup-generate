@@ -9,6 +9,7 @@ import Button from './components/Button';
 import Loader from './components/Loader';
 import TestCaseCard from './components/TestCaseCard';
 import Select from './components/Select';
+import ReviewTable from './components/ReviewTable';
 
 const App: React.FC = () => {
   const [prompt, setPrompt] = useState('');
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ClickUp Integration State
@@ -247,30 +249,61 @@ const App: React.FC = () => {
           </section>
 
           {/* Section 3: Output */}
-          <section className="bg-slate-800 p-6 rounded-xl border border-slate-700 lg:col-span-1 shadow-xl flex flex-col h-[85vh]">
+          <section className={`bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-xl flex flex-col ${viewMode === 'table' ? 'lg:col-span-3 min-h-[600px]' : 'lg:col-span-1 h-[85vh]'}`}>
             <div className="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
                <h2 className="text-xl font-bold text-indigo-400 flex items-center gap-2">
                  <span className="bg-indigo-500/20 text-indigo-400 w-7 h-7 rounded-full flex items-center justify-center text-sm">3</span>
-                 Review Results
+                 {viewMode === 'table' ? 'Review Mode (Table)' : 'Review Results'}
                </h2>
+               <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                  <button 
+                    onClick={() => setViewMode('card')}
+                    className={`px-3 py-1 rounded text-[10px] font-bold transition-colors ${viewMode === 'card' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    CARDS
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('table')}
+                    className={`px-3 py-1 rounded text-[10px] font-bold transition-colors ${viewMode === 'table' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    TABLE
+                  </button>
+               </div>
             </div>
 
             {error && <div className="mb-4 text-[11px] p-3 bg-red-900/30 border border-red-700 text-red-300 rounded leading-relaxed">{error}</div>}
             
             <div className="flex-grow space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-              {testCases.map((tc, idx) => (
-                <TestCaseCard
-                  key={idx}
-                  index={idx}
-                  testCase={tc}
-                  result={clickUpResults[idx]}
+              {viewMode === 'card' ? (
+                <>
+                  {testCases.map((tc, idx) => (
+                    <TestCaseCard
+                      key={idx}
+                      index={idx}
+                      testCase={tc}
+                      result={clickUpResults[idx]}
+                      onUpdate={(i, updated) => {
+                        const newCases = [...testCases];
+                        newCases[i] = updated;
+                        setTestCases(newCases);
+                      }}
+                    />
+                  ))}
+                </>
+              ) : (
+                <ReviewTable 
+                  testCases={testCases}
+                  platform={platform}
+                  packageName={packageName}
+                  featureMenu={featureMenu}
+                  clickUpTag={clickUpTag}
                   onUpdate={(i, updated) => {
                     const newCases = [...testCases];
                     newCases[i] = updated;
                     setTestCases(newCases);
                   }}
                 />
-              ))}
+              )}
 
               {testCases.length === 0 && !isLoading && (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center space-y-3">

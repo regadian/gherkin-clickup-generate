@@ -17,7 +17,7 @@ const testCaseSchema = {
           },
           description: {
             type: Type.STRING,
-            description: "The full test case in Gherkin format. IMPORTANT: You MUST use an explicit newline character ('\\n') to separate each keyword (Feature, Scenario, Given, When, Then, And). CRITICAL: Do NOT include colons (:) after the keywords. For example: 'Feature ...\\nScenario ...\\nGiven a user...\\nWhen the user...\\nThen the user...'.",
+            description: "The full test case in Gherkin format. IMPORTANT: You MUST use an explicit newline character ('\\n') to separate each keyword (Feature:, Scenario:, Given, When, Then, And).",
           },
           priority: {
             type: Type.STRING,
@@ -44,10 +44,10 @@ export async function generateTestCases(
 
   const contentParts: any[] = [];
 
-  const instructions = "Generate a comprehensive set of test cases for the following feature, using Gherkin syntax. Analyze the provided text and/or attached files (e.g., mockup images, screenshots, or requirements docs). Consider all provided images to understand the flow.";
+  const instructions = "Review the provided feature details and attachments. Generate optimized, non-redundant Gherkin test cases following the Senior QA Engineer guidelines.";
 
   if (featureDescription) {
-    contentParts.push({ text: `${instructions}\n\nFeature Description:\n${featureDescription}`});
+    contentParts.push({ text: `${instructions}\n\nFeature Details:\n${featureDescription}`});
   } else {
     contentParts.push({ text: instructions });
   }
@@ -68,7 +68,51 @@ export async function generateTestCases(
     model: 'gemini-3-flash-preview',
     contents: { parts: contentParts },
     config: {
-      systemInstruction: "You are an expert QA engineer specializing in writing clear, concise, and comprehensive test cases in Gherkin format. Your goal is to generate a list of test cases based on a user's feature description and any attached files. Respond ONLY with the JSON object defined in the schema, adhering strictly to the format and constraints.",
+      systemInstruction: `Act as a Senior QA Engineer.
+
+Generate Gherkin test cases based on the provided requirement.
+
+Rules:
+- Avoid redundant scenarios.
+- Do not repeat identical Given or Preconditions unless necessary.
+- Combine similar validations into Scenario Outline when applicable.
+- Focus on meaningful business coverage, not duplicate UI actions.
+- Use concise and professional QA language.
+- Cover:
+  - Positive scenarios
+  - Negative scenarios
+  - Validation scenarios
+  - Edge cases
+  - Permission/access cases (if relevant)
+- Avoid over-detailing simple UI interactions.
+- Prioritize maintainability and readability.
+- Use clear tags when appropriate:
+  @positive
+  @negative
+  @validation
+  @permission
+  @edgecase
+
+Format:
+Feature:
+Background: (only if reusable)
+Scenario:
+Scenario Outline:
+
+Output must:
+- Be structured
+- Be non-redundant
+- Be optimized for automation readiness
+- Follow best practices for scalable QA documentation
+
+Additional Rules:
+- Never create multiple scenarios with the same business objective.
+- Merge repetitive flows into one scenario.
+- Avoid testing the same validation in different wording.
+- Prefer parameterization over duplicated scenarios.
+- Each scenario must have unique coverage value.
+
+Respond ONLY with a JSON object following the provided schema.`,
       responseMimeType: 'application/json',
       responseSchema: testCaseSchema,
     },

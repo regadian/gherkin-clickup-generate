@@ -39,8 +39,22 @@ export async function generateTestCases(
   if (!apiKey) {
     throw new Error("Google Gemini API Key was not provided. Please enter it in the input field.");
   }
+
+  // Validate the API key format to support both legacy (AIzaSy) and modern standalone (AQ.) formats.
+  const trimmedKey = apiKey.trim();
+  if (!trimmedKey.startsWith("AIzaSy") && !trimmedKey.startsWith("AQ.")) {
+    throw new Error(
+      "Format API Key Gemini tidak valid! API Key Gemini resmi selalu diawali dengan 'AIzaSy' atau 'AQ.' (contoh: AQ.Ab8R...).\n\n" +
+      "Jika token Anda diawali dengan hal lain, silakan periksa kembali apakah Anda menyalin kunci yang benar dari Google AI Studio.\n\n" +
+      "Cara mendapatkan API Key Gemini yang benar:\n" +
+      "1. Buka https://aistudio.google.com/\n" +
+      "2. Login dengan akun Google Anda.\n" +
+      "3. Klik 'Get API key' di kiri atas, lalu buat API key baru.\n" +
+      "4. Salin kodenya yang diawali dengan 'AQ.' atau 'AIzaSy' dan tempel di sini."
+    );
+  }
   
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  const ai = new GoogleGenAI({ apiKey: trimmedKey });
 
   const contentParts: any[] = [];
 
@@ -139,8 +153,15 @@ export async function generateAutomationCode(
     if (!apiKey) {
         throw new Error("Google Gemini API Key was not provided. Please enter it in the input field.");
     }
+
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey.startsWith("AIzaSy") && !trimmedKey.startsWith("AQ.")) {
+        throw new Error(
+          "Format API Key Gemini tidak valid! API Key Gemini resmi selalu diawali dengan 'AIzaSy' atau 'AQ.'."
+        );
+    }
     
-    const ai = new GoogleGenAI({ apiKey: apiKey });
+    const ai = new GoogleGenAI({ apiKey: trimmedKey });
 
     const prompt = `
 **GHERKIN SCENARIOS:**

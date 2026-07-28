@@ -136,7 +136,10 @@ Respond ONLY with a JSON object following the provided schema.`,
     const jsonString = response.text.trim();
     const parsed = JSON.parse(jsonString);
     if (parsed.test_cases && Array.isArray(parsed.test_cases)) {
-        return parsed.test_cases.filter((tc: any) => tc.title && tc.description && tc.priority);
+        return parsed.test_cases.filter((tc: any) => tc.title && tc.description && tc.priority).map((tc: any) => ({
+          ...tc,
+          description: typeof tc.description === 'string' ? tc.description.replace(/\\n/g, '\n').replace(/\r\n/g, '\n') : tc.description
+        }));
     }
     throw new Error("Invalid JSON structure received from API.");
   } catch (error) {

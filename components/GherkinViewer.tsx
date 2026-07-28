@@ -16,7 +16,8 @@ const GherkinViewer: React.FC<GherkinViewerProps> = ({ gherkinText }) => {
   const keywords = ['Feature', 'Background', 'Rule', 'Scenario Outline', 'Scenario', 'Given', 'When', 'Then', 'And', 'But', 'Examples'];
   const keywordRegex = new RegExp(`^\\s*(${keywords.join('|')})`, 'i');
 
-  const lines = gherkinText.split('\\n');
+  const cleanText = gherkinText.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+  const lines = cleanText.split('\n');
 
   return (
     <div className="mt-3 bg-slate-950 p-3 rounded-md text-slate-300 text-sm whitespace-pre-wrap font-mono w-full min-h-[242px] overflow-auto">

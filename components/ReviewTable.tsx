@@ -15,15 +15,24 @@ interface ReviewTableProps {
 }
 
 /**
+ * Helper to normalize literal '\n' string sequences into real linebreaks
+ */
+export function normalizeNewlines(val: string): string {
+  if (!val) return '';
+  return val.replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+}
+
+/**
  * Format string for TSV / Excel paste.
  * Quotes multiline values and escapes internal quotes.
  */
 function formatTSVField(val: string): string {
   if (!val) return '';
-  if (val.includes('\n') || val.includes('\r') || val.includes('\t') || val.includes('"')) {
-    return `"${val.replace(/"/g, '""')}"`;
+  const cleanVal = normalizeNewlines(val);
+  if (cleanVal.includes('\n') || cleanVal.includes('\r') || cleanVal.includes('\t') || cleanVal.includes('"')) {
+    return `"${cleanVal.replace(/"/g, '""')}"`;
   }
-  return val;
+  return cleanVal;
 }
 
 /**
@@ -101,8 +110,8 @@ function parseTSVFromExcel(tsvText: string): TestCase[] {
     // Remove prefixed tags if present e.g. [Web][Auth][Menu]
     title = title.replace(/^(\[[^\]]+\]\s*)+/, '').trim() || title;
 
-    // Col 1: Description
-    const description = row[1] || '';
+    // Col 1: Description (normalize literal \n)
+    const description = normalizeNewlines(row[1] || '');
 
     // Col 2: Priority
     const priorityStr = (row[2] || 'Medium').toLowerCase();
@@ -147,7 +156,7 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
   const handleExportExcel = () => {
     const data = testCases.map(tc => ({
       'Task Name': `[${platform || 'N/A'}][${packageName || 'N/A'}][${featureMenu || 'N/A'}] ${tc.title}`,
-      'Description': tc.description,
+      'Description': normalizeNewlines(tc.description),
       'Priority': tc.priority,
       'Tags': clickUpTag || 'N/A',
       'Package': packageName || 'N/A',
@@ -167,6 +176,17 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
 
     XLSX.writeFile(workbook, `TestCases_${featureMenu || 'Review'}_${new Date().getTime()}.xlsx`);
     showNotification('Excel file downloaded successfully!');
+  };
+
+  const handleAutoCleanLinebreaks = () => {
+    if (onSetTestCases) {
+      const cleaned = testCases.map(tc => ({
+        ...tc,
+        description: normalizeNewlines(tc.description),
+      }));
+      onSetTestCases(cleaned);
+      showNotification('Automated linebreaks fixed! Descriptions formatted into clean multi-line text.');
+    }
   };
 
   // Copy whole table formatted for Excel (TSV)
@@ -216,7 +236,8 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
   };
 
   const handleEdit = (index: number, field: keyof TestCase, value: string) => {
-    const updated = { ...testCases[index], [field]: value };
+    const cleanValue = field === 'description' ? normalizeNewlines(value) : value;
+    const updated = { ...testCases[index], [field]: cleanValue };
     onUpdate(index, updated);
   };
 
@@ -269,6 +290,16 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Clean Linebreaks */}
+          <button
+            onClick={handleAutoCleanLinebreaks}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600/80 hover:bg-amber-500 text-white rounded-md text-xs font-semibold transition-colors shadow-md shadow-amber-600/20"
+            title="Convert literal \\n into clean multi-line text for Excel & Google Sheets"
+          >
+            <span>🧹</span>
+            Format Linebreaks
+          </button>
+
           {/* Copy Table TSV for Excel */}
           <button
             onClick={handleCopyTableTSV}
@@ -357,7 +388,7 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                   <td className="px-4 py-4 align-top">
                     <textarea
                       className="bg-transparent border border-transparent focus:border-indigo-500 focus:bg-slate-950/80 w-full text-gray-300 outline-none p-1.5 rounded text-xs min-h-[90px] font-mono resize-y leading-relaxed transition-all"
-                      value={tc.description}
+                      value={normalizeNewlines(tc.description)}
                       onChange={(e) => handleEdit(idx, 'description', e.target.value)}
                       placeholder="Gherkin scenario steps..."
                     />

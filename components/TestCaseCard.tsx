@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TestCase, ClickUpResult } from '../types';
+import { TestCase, ClickUpResult, SyncResult } from '../types';
 import { CheckIcon } from './icons/CheckIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import Input from './Input';
@@ -11,7 +11,7 @@ import GherkinViewer from './GherkinViewer';
 
 interface TestCaseCardProps {
   testCase: TestCase;
-  result?: ClickUpResult;
+  result?: ClickUpResult | SyncResult;
   index: number;
   onUpdate: (index: number, updatedTestCase: TestCase) => void;
 }
@@ -22,11 +22,13 @@ const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, result, index, on
   const getStatusIndicator = () => {
     if (!result) return null;
 
+    const taskId = ('clickUpId' in result ? result.clickUpId : result.id) || 'Created';
+
     if (result.success) {
       return (
         <div className="flex items-center gap-2 text-green-400 text-sm">
           <CheckIcon className="w-5 h-5 flex-shrink-0" />
-          <span>Success: Task created (ID: {result.clickUpId})</span>
+          <span>Success: Task created (ID: {taskId})</span>
         </div>
       );
     } else {

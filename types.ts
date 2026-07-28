@@ -11,6 +11,15 @@ export interface ClickUpResult {
   clickUpId?: string;
 }
 
+export interface SyncResult {
+  success: boolean;
+  message: string;
+  id?: string;
+  url?: string;
+}
+
+export type IntegrationTarget = 'huly' | 'clickup';
+
 export interface AutomationCode {
   stepDefinition: string;
   pageObject: string;

@@ -2,7 +2,15 @@ import React, { useState, useRef } from 'react';
 import { TestCase, ClickUpResult, SyncResult, Attachment, IntegrationTarget } from './types';
 import { generateTestCases } from './services/geminiService';
 import { createClickUpTask } from './services/clickupService';
-import { createHulyTask, formatTestCasesForHulyMarkdown } from './services/hulyService';
+import {
+  createHulyTask,
+  formatTestCasesForHulyMarkdown,
+  loginHuly,
+  parseHulyUrl,
+  generateHulyNodeScript,
+  generateTestCasesCsv,
+  importDirectToHulyApi,
+} from './services/hulyService';
 import TextArea from './components/TextArea';
 import Input from './components/Input';
 import Button from './components/Button';
@@ -26,10 +34,17 @@ const App: React.FC = () => {
   const [integrationTarget, setIntegrationTarget] = useState<IntegrationTarget>('huly');
 
   // Huly Integration State
+  const [hulyAuthMode, setHulyAuthMode] = useState<'credentials' | 'token'>('credentials');
+  const [hulyServerUrl, setHulyServerUrl] = useState('https://huly.app');
+  const [hulyEmail, setHulyEmail] = useState('');
+  const [hulyPassword, setHulyPassword] = useState('');
   const [hulyToken, setHulyToken] = useState('');
   const [hulyWorkspaceId, setHulyWorkspaceId] = useState('');
   const [hulyProjectId, setHulyProjectId] = useState('');
-  const [hulyEndpointUrl, setHulyEndpointUrl] = useState('https://api.huly.app/v1/issues');
+  const [hulySuiteId, setHulySuiteId] = useState('');
+  const [hulyEndpointUrl, setHulyEndpointUrl] = useState('');
+  const [hulyTargetModule, setHulyTargetModule] = useState<'test-management' | 'issues'>('test-management');
+  const [isHulyLoggingIn, setIsHulyLoggingIn] = useState(false);
 
   // ClickUp Integration State
   const [clickUpToken, setClickUpToken] = useState('');
@@ -147,8 +162,101 @@ const App: React.FC = () => {
     }
   };
 
-  // Sync to Huly
+  // Handle changes to Server URL and auto-parse workspace, space, and suite IDs if pasted
+  const handleServerUrlChange = (val: string) => {
+    setHulyServerUrl(val);
+    const parsed = parseHulyUrl(val);
+    if (parsed.workspacePath) {
+      setHulyWorkspaceId(parsed.workspacePath);
+    }
+    if (parsed.spaceId) {
+      setHulyProjectId(parsed.spaceId);
+    }
+    if (parsed.suiteId) {
+      setHulySuiteId(parsed.suiteId);
+    }
+  };
+
+  // Login to Self-Hosted or Cloud Huly using Email & Password
+  const handleHulyLogin = async () => {
+    if (!hulyEmail || !hulyPassword) {
+      setError('Silakan isi Email dan Password Huly Anda.');
+      return;
+    }
+    setIsHulyLoggingIn(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const res = await loginHuly(hulyServerUrl, hulyEmail, hulyPassword);
+      setHulyToken(res.token);
+      if (res.workspaceId) {
+        setHulyWorkspaceId(res.workspaceId);
+      }
+      if (res.projectId && !hulyProjectId) {
+        setHulyProjectId(res.projectId);
+      }
+      const { origin } = parseHulyUrl(hulyServerUrl);
+      setSuccessMessage(`Berhasil login ke Huly (${origin})! Token otentikasi & Workspace telah terdeteksi.`);
+    } catch (err: any) {
+      setError(err.message || 'Gagal login ke Huly.');
+    } finally {
+      setIsHulyLoggingIn(false);
+    }
+  };
+
+  // Sync to Huly (Direct @hcengineering/api-client or standard REST/Webhook)
   const handleCreateInHuly = async () => {
+    if (testCases.length === 0) {
+      setError('Belum ada test case yang dibuat. Silakan generate test case terlebih dahulu.');
+      return;
+    }
+
+    // Direct Huly API Client Connection Mode
+    if (hulyAuthMode === 'credentials' || (hulyEmail && hulyPassword)) {
+      if (!hulyEmail || !hulyPassword) {
+        setError('Silakan lengkapi Email dan Password Huly.');
+        return;
+      }
+      if (!hulyWorkspaceId) {
+        setError('Silakan isi Workspace ID Huly (contoh: qa atau workbench/qa).');
+        return;
+      }
+      if (!hulyProjectId) {
+        setError('Silakan isi Space ID / Project ID Huly (contoh: 6a6991253946584506fac9d2).');
+        return;
+      }
+
+      setIsSyncing(true);
+      setError(null);
+      setSuccessMessage(null);
+
+      try {
+        const { origin } = parseHulyUrl(hulyServerUrl);
+        const formattedTestCases = testCases.map(tc => ({
+          ...tc,
+          title: `[${platform || 'N/A'}][${packageName || 'N/A'}][${featureMenu || 'N/A'}] ${tc.title}`
+        }));
+
+        const res = await importDirectToHulyApi({
+          serverUrl: origin,
+          workspace: hulyWorkspaceId,
+          email: hulyEmail,
+          password: hulyPassword,
+          spaceId: hulyProjectId,
+          suiteId: hulySuiteId,
+          testCases: formattedTestCases,
+        });
+
+        setSuccessMessage(`🎉 ${res.message}`);
+      } catch (err: any) {
+        setError(err.message || 'Gagal mengimpor langsung ke Huly.');
+      } finally {
+        setIsSyncing(false);
+      }
+      return;
+    }
+
+    // Fallback Rest API Mode
     if (!hulyWorkspaceId && !hulyEndpointUrl) {
       setError('Missing Huly Workspace ID or Endpoint URL.');
       return;
@@ -165,16 +273,19 @@ const App: React.FC = () => {
               token: hulyToken,
               workspaceId: hulyWorkspaceId,
               projectId: hulyProjectId,
-              endpointUrl: hulyEndpointUrl || 'https://api.huly.app/v1/issues',
+              serverUrl: hulyServerUrl,
+              endpointUrl: hulyEndpointUrl,
               tags: clickUpTag ? [clickUpTag] : [],
               type: clickUpType,
               executionType,
+              targetModule: hulyTargetModule,
             }
           );
         })
       );
       setSyncResults(results);
-      setSuccessMessage(`Finished creating ${testCases.length} tasks in Huly!`);
+      const destinationName = hulyTargetModule === 'test-management' ? 'Huly Test Management' : 'Huly Tracker';
+      setSuccessMessage(`Finished creating ${testCases.length} tasks in ${destinationName}!`);
     } catch (err: any) {
       setError(err.message || 'Error creating tasks in Huly');
     } finally {
@@ -198,6 +309,65 @@ const App: React.FC = () => {
     } catch {
       setError('Failed to copy Markdown.');
     }
+  };
+
+  // Download Node.js Importer Script
+  const handleDownloadHulyScript = () => {
+    if (testCases.length === 0) return;
+    const script = generateHulyNodeScript(testCases, {
+      serverUrl: hulyServerUrl,
+      workspaceId: hulyWorkspaceId,
+      email: hulyEmail,
+      password: hulyPassword,
+      projectId: hulyProjectId,
+    });
+    const blob = new Blob([script], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'import-huly.js';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setSuccessMessage('Berhasil mengunduh "import-huly.js"! Jalankan "node import-huly.js" di terminal.');
+    setTimeout(() => setSuccessMessage(null), 5000);
+  };
+
+  // Copy Node.js Importer Script
+  const handleCopyHulyScript = async () => {
+    if (testCases.length === 0) return;
+    const script = generateHulyNodeScript(testCases, {
+      serverUrl: hulyServerUrl,
+      workspaceId: hulyWorkspaceId,
+      email: hulyEmail,
+      password: hulyPassword,
+      projectId: hulyProjectId,
+    });
+    try {
+      await navigator.clipboard.writeText(script);
+      setSuccessMessage('Node.js Importer Script tersalin ke clipboard! Siap ditempel & dijalankan.');
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch {
+      setError('Gagal menyalin script.');
+    }
+  };
+
+  // Download CSV
+  const handleDownloadCsv = () => {
+    if (testCases.length === 0) return;
+    const csvContent = generateTestCasesCsv(testCases);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'testcases.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setSuccessMessage('Berhasil mengunduh "testcases.csv"!');
+    setTimeout(() => setSuccessMessage(null), 4000);
   };
 
   return (
@@ -340,27 +510,111 @@ const App: React.FC = () => {
               {integrationTarget === 'huly' ? (
                 <div className="space-y-3 pt-2 border-t border-slate-700/60">
                   <div className="bg-indigo-950/40 p-2.5 rounded-lg border border-indigo-500/20 text-[11px] text-indigo-300 leading-relaxed">
-                    <strong>Huly Issue Tracker</strong> — Push issues directly to Huly API or copy pre-formatted Huly Markdown for quick import!
+                    <strong>Huly Destination</strong> — Self-Hosted & Cloud supported! Direct export into Huly Test Management or Issues Tracker.
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Workspace ID / Space</label>
-                    <Input value={hulyWorkspaceId} onChange={e => setHulyWorkspaceId(e.target.value)} placeholder="Example: my-team-workspace" />
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Huly Server / Host URL</label>
+                    <Input
+                      value={hulyServerUrl}
+                      onChange={e => handleServerUrlChange(e.target.value)}
+                      placeholder="https://huly.app or https://huly.assetfindr.com/workbench/qa"
+                    />
+                    <p className="mt-1 text-[10px] text-slate-400 leading-tight">
+                      💡 <strong>Self-hosted tip:</strong> Anda dapat paste URL penuh Huly Anda (misal: <code className="text-indigo-300 font-mono">https://huly.assetfindr.com/workbench/qa/tracker/6a698200809795a4208ea654/issues</code>), maka Host Server, Workspace, dan Tracker ID akan otomatis terurai.
+                    </p>
+                  </div>
+
+                  {/* Auth Mode Toggle */}
+                  <div className="p-2.5 bg-slate-900/80 rounded-lg border border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                      <span>INTEGRATION METHOD</span>
+                      <div className="flex bg-slate-800 p-0.5 rounded border border-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => setHulyAuthMode('credentials')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            hulyAuthMode === 'credentials' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400'
+                          }`}
+                        >
+                          🚀 Direct API Client (@hcengineering)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHulyAuthMode('token')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            hulyAuthMode === 'token' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400'
+                          }`}
+                        >
+                          🎫 REST Token / Webhook
+                        </button>
+                      </div>
+                    </div>
+
+                    {hulyAuthMode === 'credentials' ? (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="email"
+                            value={hulyEmail}
+                            onChange={e => setHulyEmail(e.target.value)}
+                            placeholder="Email (contoh: rega@assetfindr.com)"
+                          />
+                          <Input
+                            type="password"
+                            value={hulyPassword}
+                            onChange={e => setHulyPassword(e.target.value)}
+                            placeholder="Password Huly Anda"
+                          />
+                        </div>
+                        <p className="text-[10px] text-emerald-300 leading-tight bg-emerald-950/40 p-2 rounded border border-emerald-500/20">
+                          ✨ <strong>Direct Sync Active:</strong> Menggunakan library resmi <code className="font-mono text-emerald-200">@hcengineering/api-client</code>. Setelah Anda mengisi Email, Password, Workspace, dan Space ID di bawah, klik tombol <strong>Create Test Cases</strong> maka semua test case akan diunggah otomatis langsung ke Huly Test Management tanpa perlu menembak REST/Webhook atau menjalankan script manual!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 pt-1">
+                        <Input
+                          type="password"
+                          value={hulyToken}
+                          onChange={e => setHulyToken(e.target.value)}
+                          placeholder="Paste Huly Personal API Token / Access Key"
+                        />
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          💡 <strong>Opsi Token / Webhook:</strong> Gunakan opsi ini jika Anda ingin menggunakan Personal Token atau Webhook endpoint custom.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Project ID / Team Key (Optional)</label>
-                    <Input value={hulyProjectId} onChange={e => setHulyProjectId(e.target.value)} placeholder="Example: QA" />
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Huly Sub-Module Destination</label>
+                    <Select value={hulyTargetModule} onChange={e => setHulyTargetModule(e.target.value as any)}>
+                      <option value="test-management">🧪 Test Management (Test Cases Repository)</option>
+                      <option value="issues">📋 Issues & Tasks Tracker</option>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Workspace ID (contoh: qa)</label>
+                      <Input value={hulyWorkspaceId} onChange={e => setHulyWorkspaceId(e.target.value)} placeholder="qa atau workbench/qa" />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Space ID / Project ID</label>
+                      <Input value={hulyProjectId} onChange={e => setHulyProjectId(e.target.value)} placeholder="6a6991253946584506fac9d2" />
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">API Key / Personal Token</label>
-                    <Input type="password" value={hulyToken} onChange={e => setHulyToken(e.target.value)} placeholder="Huly API / Personal Token" />
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Test Suite ID (Optional)</label>
+                    <Input value={hulySuiteId} onChange={e => setHulySuiteId(e.target.value)} placeholder="6a6995803946584506facc14" />
+                    <p className="mt-0.5 text-[10px] text-slate-400">Kosongkan jika ingin langsung dibuat di root Space ID.</p>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Endpoint / Webhook Proxy URL</label>
-                    <Input value={hulyEndpointUrl} onChange={e => setHulyEndpointUrl(e.target.value)} placeholder="https://api.huly.app/v1/issues" />
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-slate-400">Custom Endpoint / Webhook (Optional)</label>
+                    <Input value={hulyEndpointUrl} onChange={e => setHulyEndpointUrl(e.target.value)} placeholder={`${hulyServerUrl.replace(/\/+$/, '')}/v1/issues`} />
                   </div>
 
                   {testCases.length > 0 && (
@@ -370,27 +624,65 @@ const App: React.FC = () => {
                         disabled={isSyncing}
                         className="!bg-indigo-600 hover:!bg-indigo-500 shadow-lg shadow-indigo-600/20"
                       >
-                        {isSyncing ? 'Creating in Huly...' : `Redirect & Create ${testCases.length} Tasks in Huly 🚀`}
+                        {isSyncing
+                          ? 'Creating in Huly...'
+                          : `Create ${testCases.length} Test Cases in ${hulyTargetModule === 'test-management' ? 'Huly Test Management 🧪' : 'Huly Tracker 📋'}`}
                       </Button>
 
-                      <div className="flex gap-2">
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleDownloadHulyScript}
+                          className="py-2 px-3 bg-emerald-700/80 hover:bg-emerald-600 text-emerald-100 rounded-lg text-xs font-bold border border-emerald-500/40 transition-colors flex items-center justify-center gap-1.5 shadow-md"
+                          title="Unduh script Node.js import-huly.js untuk mengimpor semua test case sekaligus tanpa copy-paste!"
+                        >
+                          ⚡ Download import-huly.js
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCopyHulyScript}
+                          className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg text-xs font-bold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          📜 Copy Node Script
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDownloadCsv}
+                          className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          📄 Download CSV
+                        </button>
+
                         <button
                           type="button"
                           onClick={handleCopyHulyMarkdown}
-                          className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-xs font-semibold border border-slate-600 transition-colors"
+                          className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
                         >
-                          📋 Copy Huly Markdown
+                          📋 Copy Markdown
                         </button>
-
-                        <a
-                          href="https://huly.app"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-300 rounded-lg text-xs font-semibold border border-slate-700 flex items-center justify-center gap-1 transition-colors"
-                        >
-                          Open Huly ↗
-                        </a>
                       </div>
+
+                      <a
+                        href={
+                          hulyWorkspaceId
+                            ? hulyTargetModule === 'test-management'
+                              ? hulyProjectId
+                                ? `${hulyServerUrl.replace(/\/+$/, '')}/workspace/${hulyWorkspaceId}/project/${hulyProjectId}/test-cases`
+                                : `${hulyServerUrl.replace(/\/+$/, '')}/workspace/${hulyWorkspaceId}/test-management`
+                              : hulyProjectId
+                                ? `${hulyServerUrl.replace(/\/+$/, '')}/workspace/${hulyWorkspaceId}/project/${hulyProjectId}/issues`
+                                : `${hulyServerUrl.replace(/\/+$/, '')}/workspace/${hulyWorkspaceId}/issues`
+                            : hulyServerUrl
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-2 bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 rounded-lg text-xs font-semibold border border-indigo-600 flex items-center justify-center gap-1 transition-colors"
+                        title="Open direct Huly Test Management page"
+                      >
+                        {hulyTargetModule === 'test-management' ? 'Open Huly Test Management ↗' : 'Open Huly Issues ↗'}
+                      </a>
                     </div>
                   )}
                 </div>
